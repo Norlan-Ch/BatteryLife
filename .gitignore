@@ -6,3 +6,6 @@ __pycache__/
 wandb/
 outs/
 dev/
+
+# 忽略数据集文件夹
+dataset/
