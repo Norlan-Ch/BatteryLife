@@ -51,8 +51,8 @@ datasetName2ids = {
     'NA-ion2024':29,
 }
 def my_collate_fn_withId(samples):
-    cycle_curve_data = torch.vstack([i['cycle_curve_data'].unsqueeze(0) for i in samples])
-    curve_attn_mask = torch.vstack([i['curve_attn_mask'].unsqueeze(0) for i in samples])
+    cycle_curve_data = torch.vstack([i['cycle_curve_data'].unsqueeze(0) for i in samples]) # [B, early_cycle, num_var, resample_len]
+    curve_attn_mask = torch.vstack([i['curve_attn_mask'].unsqueeze(0) for i in samples]) # [B, early_cycle]
     # input_ids = pad_sequence([i['input_ids'] for i in samples], batch_first=True, padding_value=2)
     # attention_mask = pad_sequence([i['attention_mask'] for i in samples], batch_first=True, padding_value=0)
     life_class = torch.Tensor([i['life_class'] for i in samples])
@@ -62,8 +62,8 @@ def my_collate_fn_withId(samples):
     dataset_ids = torch.Tensor([i['dataset_id'] for i in samples])
     seen_unseen_ids = torch.Tensor([i['seen_unseen_id'] for i in samples])
 
-    tmp_curve_attn_mask = curve_attn_mask.unsqueeze(-1).unsqueeze(-1) * torch.ones_like(cycle_curve_data)
-    cycle_curve_data[tmp_curve_attn_mask==0] = 0 # set the unseen data as zeros
+    tmp_curve_attn_mask = curve_attn_mask.unsqueeze(-1).unsqueeze(-1) * torch.ones_like(cycle_curve_data) # 生成掩码，[B, early_cycle, num_var, resample_len]
+    cycle_curve_data[tmp_curve_attn_mask==0] = 0 # set the unseen data as zeros 应用掩码
     return cycle_curve_data, curve_attn_mask, labels, life_class, scaled_life_class, weights, dataset_ids, seen_unseen_ids
 
 def my_collate_fn_baseline(samples):
@@ -703,3 +703,432 @@ class Dataset_original(Dataset):
             shutil.copy(source_path1 + file, target_path)
         for file in source2_files:
             shutil.copy(source_path2 + file, target_path)
+
+
+class Dataset_AE(Dataset_original):
+    """
+    Dataset for AutoEncoder in Latent Diffusion Model
+    Extracts full discharge capacity sequences across entire battery life cycle
+    
+    Provides both:
+    1. Normalized SOH sequences (discharge_capacity / nominal_capacity)
+    2. Original discharge capacity sequences (in Ah)
+    
+    NOTE: This class inherits from Dataset_original but implements its own
+    initialization to avoid loading unnecessary charge/discharge curve data.
+    The dataset split assignment code is copied from parent class to maintain
+    independence from upstream changes.
+    """
+    def __init__(self, args, flag='train', soh_len=3000, padding_mode='zero'):
+        """
+        Initialize Dataset_AE for AutoEncoder training
+        
+        Args:
+            args: model parameters containing dataset configuration
+            flag: 'train', 'val', or 'test'
+            soh_len: target sequence length for padding (None means no padding)
+            padding_mode: 'zero' (pad with zeros) or 'last' (pad with last value)
+        """
+        self.soh_len = soh_len
+        self.padding_mode = padding_mode
+
+        # 添加必要的父类属性
+        self.life_classes = json.load(open('data_provider/life_classes.json'))
+        
+        assert flag in ['train', 'test', 'val']
+        assert padding_mode in ['zero', 'last'], "padding_mode must be 'zero' or 'last'"
+        
+        # Initialize basic attributes needed by parent class methods
+        self.args = args
+        self.root_path = args.root_path
+        self.flag = flag
+        self.dataset = args.dataset
+        
+        # Reuse parent's dataset split assignment logic (copy from parent __init__)
+        # ==================== Dataset Split Assignment ====================
+        # NOTE: The following code is copied from Dataset_original.__init__()
+        # to avoid modifying the parent class (which is forked from upstream).
+        # This ensures independence and easier maintenance.
+        # 
+        # Source: Dataset_original.__init__() lines 82-186
+        # Last synced: 2024-11-04
+        # ================================================================
+
+        if self.dataset == 'exp':
+            self.train_files = split_recorder.Stanford_train_files[:3]
+            self.val_files = split_recorder.Tongji_val_files[:2] + split_recorder.HUST_val_files[:2]
+            self.test_files = split_recorder.Tongji_test_files[:2] + split_recorder.HUST_test_files[:2]
+        elif self.dataset == 'Tongji':
+            self.train_files = split_recorder.Tongji_train_files
+            self.val_files = split_recorder.Tongji_val_files
+            self.test_files = split_recorder.Tongji_test_files
+        elif self.dataset == 'HUST':
+            self.train_files = split_recorder.HUST_train_files
+            self.val_files = split_recorder.HUST_val_files
+            self.test_files = split_recorder.HUST_test_files
+        elif self.dataset == 'MATR':
+            self.train_files = split_recorder.MATR_train_files
+            self.val_files = split_recorder.MATR_val_files
+            self.test_files = split_recorder.MATR_test_files
+        elif self.dataset == 'SNL':
+            self.train_files = split_recorder.SNL_train_files
+            self.val_files = split_recorder.SNL_val_files
+            self.test_files = split_recorder.SNL_test_files
+        elif self.dataset == 'MICH':
+            self.train_files = split_recorder.MICH_train_files
+            self.val_files = split_recorder.MICH_val_files
+            self.test_files = split_recorder.MICH_test_files
+        elif self.dataset == 'MICH_EXP':
+            self.train_files = split_recorder.MICH_EXP_train_files
+            self.val_files = split_recorder.MICH_EXP_val_files
+            self.test_files = split_recorder.MICH_EXP_test_files
+        elif self.dataset == 'UL_PUR':
+            self.train_files = split_recorder.UL_PUR_train_files
+            self.val_files = split_recorder.UL_PUR_val_files
+            self.test_files = split_recorder.UL_PUR_test_files
+        elif self.dataset == 'RWTH':
+            self.train_files = split_recorder.RWTH_train_files
+            self.val_files = split_recorder.RWTH_val_files
+            self.test_files = split_recorder.RWTH_test_files
+        elif self.dataset == 'HNEI':
+            self.train_files = split_recorder.HNEI_train_files
+            self.val_files = split_recorder.HNEI_val_files
+            self.test_files = split_recorder.HNEI_test_files
+        elif self.dataset == 'CALCE':
+            self.train_files = split_recorder.CALCE_train_files
+            self.val_files = split_recorder.CALCE_val_files
+            self.test_files = split_recorder.CALCE_test_files
+        elif self.dataset == 'Stanford':
+            self.train_files = split_recorder.Stanford_train_files
+            self.val_files = split_recorder.Stanford_val_files
+            self.test_files = split_recorder.Stanford_test_files
+        elif self.dataset == 'ISU_ILCC':
+            self.train_files = split_recorder.ISU_ILCC_train_files
+            self.val_files = split_recorder.ISU_ILCC_val_files
+            self.test_files = split_recorder.ISU_ILCC_test_files
+        elif self.dataset == 'XJTU':
+            self.train_files = split_recorder.XJTU_train_files
+            self.val_files = split_recorder.XJTU_val_files
+            self.test_files = split_recorder.XJTU_test_files
+        elif self.dataset == 'MIX_large':
+            self.train_files = split_recorder.MIX_large_train_files
+            self.val_files = split_recorder.MIX_large_val_files
+            self.test_files = split_recorder.MIX_large_test_files
+        elif self.dataset == 'ZN-coin':
+            self.train_files = split_recorder.ZNcoin_train_files
+            self.val_files = split_recorder.ZNcoin_val_files
+            self.test_files = split_recorder.ZNcoin_test_files
+        elif self.dataset == 'CALB':
+            self.train_files = split_recorder.CALB_train_files
+            self.val_files = split_recorder.CALB_val_files
+            self.test_files = split_recorder.CALB_test_files
+        elif self.dataset == 'ZN-coin42':
+            self.train_files = split_recorder.ZN_42_train_files
+            self.val_files = split_recorder.ZN_42_val_files
+            self.test_files = split_recorder.ZN_42_test_files
+        elif self.dataset == 'ZN-coin2024':
+            self.train_files = split_recorder.ZN_2024_train_files
+            self.val_files = split_recorder.ZN_2024_val_files
+            self.test_files = split_recorder.ZN_2024_test_files
+        elif self.dataset == 'CALB42':
+            self.train_files = split_recorder.CALB_42_train_files
+            self.val_files = split_recorder.CALB_42_val_files
+            self.test_files = split_recorder.CALB_42_test_files
+        elif self.dataset == 'CALB2024':
+            self.train_files = split_recorder.CALB_2024_train_files
+            self.val_files = split_recorder.CALB_2024_val_files
+            self.test_files = split_recorder.CALB_2024_test_files
+        elif self.dataset == 'NAion':
+            self.train_files = split_recorder.NAion_2021_train_files
+            self.val_files = split_recorder.NAion_2021_val_files
+            self.test_files = split_recorder.NAion_2021_test_files
+        elif self.dataset == 'NAion42':
+            self.train_files = split_recorder.NAion_42_train_files
+            self.val_files = split_recorder.NAion_42_val_files
+            self.test_files = split_recorder.NAion_42_test_files
+        elif self.dataset == 'NAion2024':
+            self.train_files = split_recorder.NAion_2024_train_files
+            self.val_files = split_recorder.NAion_2024_val_files
+            self.test_files = split_recorder.NAion_2024_test_files
+        
+        # Select files based on flag
+        if flag == 'train':
+            self.files = [i for i in self.train_files]
+        elif flag == 'val':
+            self.files = [i for i in self.val_files]
+        elif flag == 'test':
+            self.files = [i for i in self.test_files]
+            
+        # ==================== End of Copied Code ====================
+
+        # Read all discharge capacity sequences (AE-specific data loading)
+        # Returns both SOH (normalized) and original discharge capacity sequences
+        self.total_soh_seqs, self.total_discharge_capacity_seqs, self.eols, self.total_dataset_ids, self.total_padding_masks = self.read_data_AE()
+        
+        # Validate data
+        self._validate_data()
+        
+        # Print statistics (training only)
+        if flag == 'train':
+            self._print_statistics()
+    
+    def extract_discharge_capacity_sequence(self, file_name):
+        """
+        Extract full discharge capacity sequence from a battery cell
+        Reuses parent's read_cell_data_according_to_prefix method
+        
+        Returns:
+            soh_seq: np.array of SOH values (normalized: discharge_capacity / nominal_capacity)
+            discharge_capacity_seq: np.array of original discharge capacities (in Ah)
+            eol: end of life (cycle count)
+        """
+        # Reuse parent's method to read data and eol
+        data, eol = super().read_cell_data_according_to_prefix(file_name)
+        
+        if eol is None:
+            # Battery has not reached end of life
+            return None, None, None
+        
+        # Get nominal capacity for normalization (same logic as parent class)
+        if file_name.startswith('RWTH'):
+            nominal_capacity = 1.85
+        elif file_name.startswith('SNL_18650_NCA_25C_20-80'):
+            nominal_capacity = 3.2
+        else:
+            nominal_capacity = data['nominal_capacity_in_Ah']
+        
+        cycle_data = data['cycle_data']
+        soh_values = []  # Normalized SOH
+        discharge_capacity_values = []  # Original discharge capacity in Ah
+        
+        # Extract discharge capacity from each cycle
+        for cycle_idx, sub_cycle_data in enumerate(cycle_data):
+            if cycle_idx >= eol:
+                break
+            
+            # Get discharge capacity for this cycle
+            discharge_capacity_in_Ah = sub_cycle_data.get('discharge_capacity_in_Ah', None)
+            
+            if discharge_capacity_in_Ah is not None and len(discharge_capacity_in_Ah) > 0:
+                # Take the maximum discharge capacity in this cycle
+                max_discharge_capacity = np.max(discharge_capacity_in_Ah)  # Unit: Ah
+                
+                # Store original discharge capacity
+                discharge_capacity_values.append(max_discharge_capacity)
+                
+                # Normalize by nominal capacity to get SOH
+                soh_values.append(max_discharge_capacity / nominal_capacity)
+            else:
+                # Handle missing data
+                if len(discharge_capacity_values) > 0:
+                    # Use last valid values
+                    discharge_capacity_values.append(discharge_capacity_values[-1])
+                    soh_values.append(soh_values[-1])
+                else:
+                    # Use default values for new battery
+                    discharge_capacity_values.append(nominal_capacity)
+                    soh_values.append(1.0) 
+        
+        soh_seq = np.array(soh_values, dtype=np.float32)
+        discharge_capacity_seq = np.array(discharge_capacity_values, dtype=np.float32)
+        
+        return soh_seq, discharge_capacity_seq, eol
+    
+    def read_data_AE(self):
+        """
+        Read all discharge capacity sequences from files
+        
+        Returns:
+            total_soh_seqs: list of SOH sequences (normalized, possibly padded)
+            total_discharge_capacity_seqs: list of discharge capacity sequences (in Ah, possibly padded)
+            eols: list of end-of-life values
+            total_dataset_ids: list of dataset identifiers
+            padding_masks: Valid values in total_soh_seqs and total_discharge_capacity_seqs
+        """
+        total_soh_seqs = []
+        total_discharge_capacity_seqs = []
+        eols = []
+        total_dataset_ids = []
+        total_padding_masks = []
+        
+        for file_name in tqdm(self.files, desc=f'Loading {self.flag} data for AE'):
+            soh_seq, discharge_capacity_seq, eol = self.extract_discharge_capacity_sequence(file_name)
+            
+            # Get dataset ID
+            if file_name not in split_recorder.MICH_EXP_test_files and file_name not in split_recorder.MICH_EXP_train_files and file_name not in split_recorder.MICH_EXP_val_files:
+                dataset_id = datasetName2ids[file_name.split('_')[0]]
+            else:
+                dataset_id = datasetName2ids['MICH_EXP']
+
+            if soh_seq is None or discharge_capacity_seq is None or eol is None:
+                # Skip batteries that haven't reached EOL
+                continue
+            
+            # Apply Padding/Truncation if soh_len is specified
+            if self.soh_len is not None:
+                if len(soh_seq) < self.soh_len:
+                    # Padding
+                    if self.padding_mode == 'zero':
+                        # Pad with zeros
+                        soh_seq = np.pad(soh_seq, (0, self.soh_len - len(soh_seq)), mode='constant', constant_values=0)
+                        discharge_capacity_seq = np.pad(discharge_capacity_seq, (0, self.soh_len - len(discharge_capacity_seq)), mode='constant', constant_values=0)
+                    elif self.padding_mode == 'last':
+                        # Pad with last value
+                        soh_seq = np.pad(soh_seq, (0, self.soh_len - len(soh_seq)), mode='edge')
+                        discharge_capacity_seq = np.pad(discharge_capacity_seq, (0, self.soh_len - len(discharge_capacity_seq)), mode='edge')
+
+                elif len(soh_seq) > self.soh_len:
+                    # Truncate sequences (keep first soh_len cycles)
+                    soh_seq = soh_seq[:self.soh_len]
+                    discharge_capacity_seq = discharge_capacity_seq[:self.soh_len]
+                    eol = min(eol, self.soh_len)
+
+            # Padding mask
+            padding_mask = np.zeros(self.soh_len, dtype=np.bool_)
+            padding_mask[:eol] = True
+            
+            total_soh_seqs.append(soh_seq)
+            total_discharge_capacity_seqs.append(discharge_capacity_seq)
+            eols.append(eol)
+            total_dataset_ids.append(dataset_id)
+            total_padding_masks.append(padding_mask)
+
+        return total_soh_seqs, total_discharge_capacity_seqs, eols, total_dataset_ids, total_padding_masks
+
+    def _validate_data(self):
+        """Validate data integrity"""
+        n = len(self.total_soh_seqs)
+        assert len(self.total_discharge_capacity_seqs) == n
+        assert len(self.eols) == n
+        assert len(self.total_dataset_ids) == n
+        assert len(self.total_padding_masks) == n
+        
+        # Check for NaN in valid regions
+        for idx, (soh_seq, eol) in enumerate(zip(self.total_soh_seqs, self.eols)):
+            if np.any(np.isnan(soh_seq[:eol])):
+                raise ValueError(f"Sample {idx}: NaN in SOH sequence")
+            if np.any(np.isnan(self.total_discharge_capacity_seqs[idx][:eol])):
+                raise ValueError(f"Sample {idx}: NaN in discharge capacity")
+        
+        print(f"✓ Data validation passed: {n} samples loaded")
+    
+    def _print_statistics(self):
+        """Print dataset statistics (training only)"""
+        eols_array = np.array(self.eols)
+        print(f"\n{'='*60}")
+        print(f"Dataset_AE Statistics ({self.flag} set, dataset={self.dataset}):")
+        print(f"  Total samples: {len(self.total_soh_seqs)}")
+        print(f"  EOL range: [{eols_array.min()}, {eols_array.max()}] cycles")
+        print(f"  EOL mean ± std: {eols_array.mean():.1f} ± {eols_array.std():.1f}")
+        print(f"  EOL median: {np.median(eols_array):.0f}")
+        
+        if self.soh_len is not None:
+            n_padded = np.sum(eols_array < self.soh_len)
+            n_truncated = np.sum(eols_array > self.soh_len)
+            n_exact = np.sum(eols_array == self.soh_len) 
+            total = len(eols_array)
+            
+            print(f"  Target seq_len: {self.soh_len}")
+            print(f"  Padded samples: {n_padded} ({n_padded/total*100:.1f}%)")
+            print(f"  Truncated samples: {n_truncated} ({n_truncated/total*100:.1f}%)")
+            print(f"  Exact match: {n_exact} ({n_exact/total*100:.1f}%)")  # ✅ 显示精确匹配
+            print(f"  Padding mode: '{self.padding_mode}'")
+            
+            # ✅ 如果有截断，显示截断样本的 EOL 范围
+            if n_truncated > 0:
+                truncated_eols = eols_array[eols_array > self.soh_len]
+                print(f"  Truncated EOL range: [{truncated_eols.min()}, {truncated_eols.max()}]")
+        
+        print(f"{'='*60}\n")
+
+    def __len__(self):
+        return len(self.total_soh_seqs)
+    
+    def __getitem__(self, index):
+        """
+        Get a single sample
+        
+        Returns:
+            dict containing:
+                - soh_seq: SOH sequence (normalized: discharge_capacity / nominal_capacity)
+                - discharge_capacity_seq: original discharge capacity sequence (in Ah)
+                - eol: end of life value
+                - dataset_id: dataset identifier
+        """
+        return {
+            'soh_seq': torch.tensor(self.total_soh_seqs[index], dtype=torch.float32),
+            'discharge_capacity_seq': torch.tensor(self.total_discharge_capacity_seqs[index], dtype=torch.float32),
+            'eol': self.eols[index],
+            'dataset_id': self.total_dataset_ids[index],
+            'padding_mask': torch.tensor(self.total_padding_masks[index], dtype=torch.bool)
+        }
+
+
+# Collate function for Dataset_AE
+def collate_fn_AE(samples):
+    """
+    Collate function for Dataset_AE
+    
+    Args:
+        samples: list of dict from __getitem__, each containing:
+            - soh_seq: SOH sequence (normalized)
+            - discharge_capacity_seq: discharge capacity sequence (Ah)
+            - eol: end of life value
+            - padding_mask: valid value mask
+    
+    Returns:
+        batched dict with tensors:
+            - soh_seq: (batch_size, seq_len)
+            - discharge_capacity_seq: (batch_size, seq_len)
+            - eol: (batch_size,)
+            - padding_mask: (batch_size, seq_len)
+    TODO: 更改dataset，不统一padding，以及在collate_fn_AE中添加
+            (1)自动padding到最长序列功能,可选的padding模式（zero/last）
+            (2)将padding_mask放到collate_fn中生成
+            (3)相应的，transformer tokenizer应该有可学习token，以实现压缩功能
+    """
+    soh_seqs = torch.stack([s['soh_seq'] for s in samples])
+    discharge_capacity_seqs = torch.stack([s['discharge_capacity_seq'] for s in samples])
+    eols = torch.tensor([s['eol'] for s in samples], dtype=torch.long)
+    padding_masks = torch.stack([s['padding_mask'] for s in samples])
+
+    return {
+        'soh_seq': soh_seqs,
+        'discharge_capacity_seq': discharge_capacity_seqs,
+        'eol': eols,
+        'padding_mask': padding_masks
+    }
+
+def collate_fn_AE_withID(samples):
+    """
+    Collate function for Dataset_AE
+    
+    Args:
+        samples: list of dict from __getitem__, each containing:
+            - soh_seq: SOH sequence (normalized)
+            - discharge_capacity_seq: discharge capacity sequence (Ah)
+            - eol: end of life value
+            - padding_mask: valid value mask
+            - dataset_id: dataset identifier
+    
+    Returns:
+        batched dict with tensors:
+            - soh_seq: (batch_size, seq_len)
+            - discharge_capacity_seq: (batch_size, seq_len)
+            - eol: (batch_size,)
+            - padding_mask: (batch_size, seq_len)
+            - dataset_id: (batch_size,)
+    """
+    soh_seqs = torch.stack([s['soh_seq'] for s in samples])
+    discharge_capacity_seqs = torch.stack([s['discharge_capacity_seq'] for s in samples])
+    eols = torch.tensor([s['eol'] for s in samples], dtype=torch.long)
+    padding_masks = torch.stack([s['padding_mask'] for s in samples])
+    dataset_ids = torch.tensor([s['dataset_id'] for s in samples], dtype=torch.long)
+    
+    return {
+        'soh_seq': soh_seqs,
+        'discharge_capacity_seq': discharge_capacity_seqs,
+        'eol': eols,
+        'padding_mask': padding_masks,
+        'dataset_id': dataset_ids
+    }
