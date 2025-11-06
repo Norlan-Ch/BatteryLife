@@ -9,3 +9,7 @@ dev/
 
 # 忽略数据集文件夹
 dataset/
+
+.vscode/
+
+.gitmessage.txt
