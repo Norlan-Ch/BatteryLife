@@ -76,8 +76,11 @@ class ISU_ILCCPreprocessor(BasePreprocessor):
         skip_batteries_num = 0
         for cell in tqdm(valid_cells, desc='Processing ISU_ILCC cells'):
             print(f'processing cell {cell}')
+            
+            # drop the abnormal cells
             if cell == 'G42C4' or cell == 'G9C4' or cell == 'G25C4' or 'G26' in cell or 'G11' in cell:
                 continue
+            
             # Step1: judge whether to skip the processed file
             whether_to_skip = self.check_processed_file('ISU-ILCC_' + cell)
             if whether_to_skip == True:
@@ -109,7 +112,7 @@ class ISU_ILCCPreprocessor(BasePreprocessor):
                 cycle_df['Q_discharge'] = pd.concat([pd.DataFrame(charge_zero_df), pd.DataFrame(cycling_dict['QV_discharge']['Q'][index])], ignore_index=True)
                 df = pd.concat([df, cycle_df], ignore_index=True)\
 
-            # Step3: drop the RPT test data in the cycling data
+            # Step3: drop the cycles after every RPT test
             df = clean_cell(df, zip_path, cell, subfolder)
 
             # Step4: organize the cell data
@@ -191,6 +194,7 @@ def clean_cell(df, zip_path, cell, subfolder):
     data_dict_rpt = convert_RPT_to_dict(zip_path, cell, subfolder)
     cycle_start = data_dict_cycle['QV_discharge']['t']
 
+    # drop the cycles after every RPT test
     for cycle_number in range(len(cycle_start)):
         current_cycle_start = data_dict_cycle['QV_discharge']['t'][cycle_number][0]
         if not data_dict_rpt['start_stop_time']['start'][i]:

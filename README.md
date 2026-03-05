@@ -2,6 +2,8 @@
 
 This is the official repository for [BatteryLife: A Comprehensive Dataset and Benchmark for Battery Life Prediction](https://dl.acm.org/doi/10.1145/3711896.3737372). If you find this repository useful, we would appreciate citations to our paper and stars to this repository.
 
+:triangular_flag_on_post: **News** (2026.02) BatteryLife has exceeded 30,000 downloads. BatteryLife v10 is now released, with fixes for issues reported over the past year (update details are available [here](https://github.com/Ruifeng-Tan/BatteryLife/blob/main/assets/Version10_Update_Details.md)). We sincerely appreciate the support from the community.
+
 :triangular_flag_on_post:**News** (2025.10) Added the standardized [SDU dataset](https://www.cell.com/cell-reports-physical-science/fulltext/S2666-3864(25)00256-5) to BatteryLife. Corrected the time_in_s column for all batteries.
 
 🔥**News** (2025.08) BatteryLife downloads exceed 10,000.
@@ -30,13 +32,13 @@ This is the official repository for [BatteryLife: A Comprehensive Dataset and Be
 The processed datasets can be accessed via multiple ways:
 
 1. You can download the datasets from [Huggingface](https://huggingface.co/datasets/Hongwxx/BatteryLife_processed/tree/main) [[tutorial]](./assets/Data_download.md).
-2. You can download the datasets from [Zenodo](https://zenodo.org/records/17451571).
+2. You can download the datasets from [Zenodo](https://zenodo.org/records/18646655).
 
 Note that brief introductions to each dataset are available under the directory of each dataset.
 
 All the raw datasets are publicly available, interested users can download them from the following links:
 
-- Zn-ion, Na-ion, and CALB datasets: [Zenodo link](https://zenodo.org/records/15013636) [Huggingface link](https://huggingface.co/datasets/Hongwxx/BatteryLife_Raw/tree/main) [[tutorial]](./assets/Data_download.md#how-to-download-the-raw-data-from-huggingface)
+- Zn-ion, Na-ion, and CALB datasets: [Zenodo link](https://zenodo.org/records/17960956) [Huggingface link](https://huggingface.co/datasets/Hongwxx/BatteryLife_Raw/tree/main) [[tutorial]](./assets/Data_download.md#how-to-download-the-raw-data-from-huggingface)
 - CALCE: [link](https://calce.umd.edu/battery-data)
 - MATR: [Three batches](https://data.matr.io/1/projects/5c48dd2bc625d700019f3204) and [Batch 9](https://data.matr.io/1/projects/5d80e633f405260001c0b60a/batches/5dcef1fe110002c7215b2c94)
 - HUST: [link](https://data.mendeley.com/datasets/nsc7hnsg4s/2)
@@ -98,6 +100,17 @@ python preprocess_scripts.py
 
 If you download the processed datasets, you can skip this step.
 
+- During the development of BatteryLife, we frequently encountered problems where the processed data still contained potential issues after processing. Consequently, according to our experience, we have provided some Jupyter scripts for the double-check of processed data in the `./check_data_scripts/` folder to help the quick verification and processing of the data for the community. By conducting quick checks to ensure that all characteristic curves align with expectations, potential downstream complications can be effectively mitigated.
+
+  - `check_capacity_curves.ipynb` : for checking charge and discharge capacities curve of the batteries..
+  - `check_soh_curves.ipynb` : for checking the degradation trajectory of the batteries.
+  - `check_voltage_current_curves.ipynb` : for checking the voltage and current curves of the batteries.
+
+How to calculate the statistical information of aging conditions for processed data:
+
+- Firstly, run the `aging_conditions.py` script to generate the `name2agingConditionID.json`, which the aging condition number for each battery.
+- Secondly, run the `dataset_overview_calculation.py` script to calculate the aging conditions statistical information for preprocessed data.
+
 ### Train the model [[tutorial](./assets/Model_training.md)]
 
 Before you start training, please move all **processed datasets (such as, HUST, MATR, et al.)** folders and **Life labels** folder (downloaded from Hugginface or Zenodo websites) into `./dataset` folder under the root folder.
@@ -138,10 +151,25 @@ sh ./train_eval_scripts/domain_adaptation_script.sh
 - The data structure of the standardized data is described in [Data_structure_description.md](./assets/Data_structure_description.md). 
 - Further details of data statistics are available at [Further_details_of_data_statistics.md](./assets/Further_details_of_data_statistics.md).
 - Further details of processed charge and discharge capacity data are available at [Further_details_of_processed_charge_and_discharge_capacity_data.md](./assets/Further_details_of_processed_charge_and_discharge_capacity_data.md).
+- BatteryLife v10 update details are available at [Version10_Update_Details.md](./assets/Version10_Update_Details.md).
 
 ## Welcome contributions
 
-Advancing AI4Battery requires standardized datasets. However, the available battery life datasets are typically stored in different places and in different formats. We have put great efforts into integrating 13 previously available datasets and 3 of our datasets. BatteryLife serves as a platform to share all kinds of standardized datasets. We warmly welcome contributions from the community to further enhance this collection by providing datasets standardized according to the BatteryLife standards.
+Advancing AI4Battery requires standardized datasets. However, the available battery life datasets are typically stored in different places and in different formats. We have put great efforts into integrating 13 previously available datasets and 3 of our datasets. BatteryLife aims to become a unified platform for sharing standardized battery aging and lifetime datasets. We warmly welcome contributions from the community—whether by sharing new datasets or standardizing existing ones according to the BatteryLife guidelines.
+
+To further broaden the range of available resources, we list below several open-source but currently unprocessed datasets in the battery life domain:
+
+| Index | Release Year | Data Download Link                                           | Journals/Conferences           | Preprocess Status  |
+| ----- | ------------ | ------------------------------------------------------------ | ------------------------------ | ------------------ |
+| 1     | 2023         | [Item - eVTOL Battery Dataset - Carnegie Mellon University - Figshare](https://kilthub.cmu.edu/articles/dataset/eVTOL_Battery_Dataset/14226830/2) | Scientific Data                |                    |
+| 2     | 2024         | [Dataset - Dynamic cycling enhances battery lifetime Stanford Digital Repository](https://purl.stanford.edu/td676xr4322) | Nature Energy                  |                    |
+| 3     | 2025         | [Aging matrix visualizes complexity of battery aging across hundreds of cycling protocols](https://data.matr.io/11/) | Energy & Environmental Science |                    |
+| 4     | 2025         | [Degradation path prediction of lithium-ion batteries under dynamic operating sequences](https://data.mendeley.com/datasets/h2y7mj4kt7/2) | Energy & Environmental Science | Ongoing                   |
+| 5     | 2025         | [Non-destructive degradation pattern decoupling for early battery trajectory prediction via physics-informed learning](https://zenodo.org/records/10715209) | Energy & Environmental Science |                    |
+| 6     | 2025         | [A dataset of over one thousand computed tomography scans of battery cells](https://plus.figshare.com/articles/dataset/A_dataset_of_over_one_thousand_computed_tomography_scans_of_battery_cells/25330501) | ChemRxiv |  Ongoing                  |
+| 7     | 2026         | [Transfer from lithium to sodium: promoting battery lifetime prognosis application](https://pubs.rsc.org/en/content/articlehtml/2025/eb/d5eb00215j) | EES Batteries |                    |
+| 8     | 2026         | [Large battery model for multi-state co-estimation and intelligent recommendation using mixed data sources](https://data.mendeley.com/datasets/dbwsn6t96j/1) | Energy Storage Materials |                    |
+| 9     | 2026         | [Discovery Learning predicts battery cycle life from minimal experiments](https://zenodo.org/records/17654407) | Nature |       Ongoing             |
 
 If you are interested in contributing, please either submit a pull request or contact us via email at rtan474@connect.hkust-gz.edu.cn and whong719@connect.hkust-gz.edu.cn. To integrate your data into the BatteryLife repositories, please provide:
 
